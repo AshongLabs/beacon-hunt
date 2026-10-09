@@ -14,7 +14,7 @@ Everything runs in a single web page. There is nothing to install and no account
 - Beginners who have heard terms like "beaconing" or "command and control" and want to see what they actually look like.
 - Anyone curious about how defenders find malware without ever touching the infected machine.
 
-## Plain-English glossary
+## Glossary
 
 | Term | What it means |
 |---|---|
@@ -67,7 +67,7 @@ Everything runs in a single web page. There is nothing to install and no account
 
 After you answer correctly, the page shows an example detection rule. A version of it is saved in this repository as `dns-burst.yml`.
 
-**What it does, in plain English:** it raises an alert when a single machine has **4 or more failed DNS lookups within 2 minutes**. A single typo won't trigger it, but a burst of failures will, which matches how malware that generates random domain names behaves.
+**What it does:** it raises an alert when a single machine has **4 or more failed DNS lookups within 2 minutes**. A single typo won't trigger it, but a burst of failures will, which matches how malware that generates random domain names behaves.
 
 **Technical details:** it is a Sigma *correlation rule* written for Zeek's `dns.log`. It counts events where `rcode_name` is `NXDOMAIN`, grouped by the source address `id.orig_h`, over a 2-minute window.
 
@@ -100,7 +100,7 @@ This is a learning example, not a ready-to-use detection. Please read these befo
 - **Sigma can't check for even spacing.** Sigma can count events, but it has no way to test whether connections are evenly spaced in time. Spotting regular beacon intervals is a statistical job done in your SIEM.
 - **Backend support varies.** Not every tool supports Sigma correlation rules. See the [Sigma correlation documentation](https://sigmahq.io/docs/meta/correlations.html).
 
-## How it works (for the curious)
+## How it works
 
 The page contains a small generator, the `build(seed)` function in `index.html` (between the `GEN` markers). Starting from a random number (the *seed*), it builds a scenario step by step:
 
@@ -114,10 +114,10 @@ The explanation shown after a correct answer is generated from the same values, 
 
 ## About the data
 
-Everything is synthetic and randomly generated. Public IP addresses come from the ranges reserved for documentation (192.0.2.0/24, 198.51.100.0/24 and 203.0.113.0/24), and domain names use the reserved `.example` ending, so none of them point to real systems. No real network traffic, company data or employer data is used.
+Everything is synthetic and randomly generated. Public IP addresses come from the ranges reserved for documentation (192.0.2.0/24, 198.51.100.0/24 and 203.0.113.0/24), and domain names use the reserved `.example` ending, so none of them point to real systems. No real network traffic, business data or employer data is used.
 
 ## About this project
 
 This is an original learning exercise, inspired by security concepts I studied while preparing for the CompTIA CySA+ certification. It is not CompTIA exam content and is not affiliated with CompTIA.
 
-I built it with AI assistance (Claude). I then ran the Sigma conversion myself. Numerous checks were run during development: generated scenarios were tested for consistency (unique addresses, correct timing and counts) and the page was exercised in a web browser. It is a beginner exercise, not a production detection tool.
+I vibecoded this with the assistance of Claude. I then ran the Sigma conversion on my computer. Numerous checks were run during development: generated scenarios were tested for consistency (unique addresses, correct timing and counts) and the page was exercised in a web browser. It is a beginner exercise, not a production detection tool.
