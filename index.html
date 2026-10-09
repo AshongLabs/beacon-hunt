@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: single narrow column. Brief, inventory, short log excerpt, one question, then a short explanation. */
+:root{
+  --bg:#edf0ec; --panel:#f8faf7; --ink:#1b2420; --muted:#56655d; --line:#cbd4cc;
+  --accent:#a8480a; --accent-ink:#ffffff; --ok:#1d7447; --bad:#b3261e;
+  --f-display:'Barlow Condensed','Arial Narrow',sans-serif;
+  --f-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111613; --panel:#19201c; --ink:#e3ebe5; --muted:#94a499; --line:#2b3731;
+  --accent:#f0a04b; --accent-ink:#1a1206; --ok:#5cc58a; --bad:#ff8078; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111613; --panel:#19201c; --ink:#e3ebe5; --muted:#94a499; --line:#2b3731;
+  --accent:#f0a04b; --accent-ink:#1a1206; --ok:#5cc58a; --bad:#ff8078; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;padding-inline:16px;padding-block:20px 48px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--f-display);font-size:clamp(2.2rem,6vw,3rem);line-height:.95;margin:0;text-transform:uppercase;letter-spacing:.01em}
+h2{font-family:var(--f-display);font-size:1.4rem;margin:0 0 8px;text-transform:uppercase;letter-spacing:.03em}
+p{margin:0 0 10px;max-width:66ch}
+header{border-bottom:2px solid var(--ink);padding-bottom:12px;display:flex;flex-wrap:wrap;gap:10px 16px;justify-content:space-between;align-items:flex-end}
+.panel{background:var(--panel);border:1px solid var(--line);padding:16px;min-width:0}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.mono{font-family:var(--f-mono);font-size:12.5px}
+pre{font-family:var(--f-mono);font-size:12.5px;line-height:1.7;background:var(--bg);border:1px solid var(--line);padding:12px;overflow-x:auto;margin:0 0 10px}
+.dns{color:var(--muted)}
+.opts{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.opts label{display:flex;gap:10px;padding:8px 10px;border:1px solid var(--line);background:var(--bg);cursor:pointer}
+.opts input{accent-color:var(--accent)}
+.btn{background:var(--accent);color:var(--accent-ink);border:0;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer;border-radius:3px}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fb{padding:10px 12px;border-left:4px solid var(--line);background:var(--bg);margin-top:4px}
+.fb.ok{border-color:var(--ok)}.fb.bad{border-color:var(--bad)}
+ul{margin:0 0 10px;padding-left:20px}li{margin-bottom:5px;max-width:66ch}
+.note{font-size:12.5px;color:var(--muted)}
+#log{max-height:440px;overflow:auto}
+#log.big{max-height:none}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.controls select,.controls input[type=text]{background:var(--bg);color:var(--ink);border:1px solid var(--line);padding:7px 10px;font:inherit;border-radius:3px;min-width:0}
+.controls input[type=text]{flex:1 1 180px}
+#inv tr[tabindex]{cursor:pointer}
+#inv tr[tabindex]:hover,#inv tr.sel{background:var(--bg);outline:1px solid var(--accent);outline-offset:-1px}
+select:focus-visible,#inv tr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+fieldset{border:0;padding:0;margin:0;min-width:0}
+legend{font-family:var(--f-display);font-size:1.4rem;text-transform:uppercase;letter-spacing:.03em;padding:0;margin:0 0 8px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+</style>
+<style>body{margin:0}</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <div><h1>Beacon Hunt</h1><p class="note" style="margin:6px 0 0">One of these machines is calling home to a command-and-control server.</p></div>
+  <button class="btn ghost" id="newbtn" type="button">New scenario</button>
+</header>
+
+<div class="panel">
+  <h2>Assets</h2>
+  <div class="scroll"><table><thead><tr><th>Hostname</th><th>IP address</th><th>Role</th></tr></thead><tbody id="inv"></tbody></table></div>
+  <p class="note" id="base" style="margin:10px 0 0"></p>
+</div>
+
+<div class="panel">
+  <h2>Log excerpt</h2>
+  <p class="note">Lines from the firewall (fw) and the DNS resolver (dns). Times are UTC. out is bytes sent. Selecting a host in the asset table filters the log. It does not choose your answer.</p>
+  <div class="controls">
+    <select id="fh" aria-label="Filter by host"></select>
+    <select id="ft" aria-label="Filter by log type"><option value="">All types</option><option value="dns">DNS</option><option value="fw">Firewall</option></select>
+    <input type="text" id="q" placeholder="Search IP, domain or text" aria-label="Search the log">
+    <button class="btn ghost" id="clr" type="button">Clear filters</button>
+    <button class="btn ghost" id="exp" type="button" aria-pressed="false">Expand log</button>
+  </div>
+  <p class="note" id="cnt" style="margin:0 0 8px" aria-live="polite"></p>
+  <pre id="log" tabindex="0" aria-label="Log lines"></pre>
+</div>
+
+<div class="panel">
+  <fieldset><legend>Which host is compromised?</legend>
+  <div class="opts" id="opts"></div></fieldset>
+  <div class="row"><button class="btn" id="check" type="button">Check answer</button><button class="btn ghost" id="hint" type="button">Hint</button></div>
+  <div id="fb" aria-live="polite" style="margin-top:12px"></div>
+</div>
+
+<div id="why" hidden></div>
+<p class="note">Original synthetic exercise with randomly generated names and addresses from ranges reserved for documentation. Not CompTIA exam content.</p>
+</div>
+
+<script>
+/*GEN*/
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function build(seed){
+  const R=mulberry32(seed);
+  const ri=(a,b)=>a+Math.floor(R()*(b-a+1));
+  const pick=a=>a[Math.floor(R()*a.length)];
+  const AN='abcdefghijklmnopqrstuvwxyz0123456789';
+  const rs=(n)=>{let s='';for(let i=0;i<n;i++)s+=AN[Math.floor(R()*AN.length)];return s};
+  const o2=ri(16,200),o3=ri(1,30),used=new Set();
+  const uniq=f=>{let v;do{v=f()}while(used.has(v));used.add(v);return v};
+  const pub=()=>uniq(()=>pick(['192.0.2','198.51.100','203.0.113'])+'.'+ri(1,254));
+  const wp=pick(['ws','pc','lt']),hosts=[];
+  for(let i=0;i<5;i++)hosts.push({kind:'ws',role:'Workstation',name:uniq(()=>wp+'-'+rs(4)),ip:uniq(()=>`10.${o2}.${o3}.${ri(20,240)}`)});
+  const roles=pick([['File server','file1','Database server','db1'],['Web server','web1','Mail relay','mail1'],['Application server','app1','File server','file1']]);
+  hosts.push({kind:'srv',role:roles[0],name:'srv-'+roles[1],ip:uniq(()=>`10.${o2}.${o3+1}.${ri(5,60)}`)});
+  hosts.push({kind:'srv',role:roles[2],name:'srv-'+roles[3],ip:uniq(()=>`10.${o2}.${o3+1}.${ri(61,120)}`)});
+  const sites=[['www.dailywire-news.example',pub()],['mail.cloudsuite.example',pub()],['updates.officesuite.example',pub()],['login.idp-sso.example',pub()]];
+  const comp=hosts[ri(0,6)];
+  const decoy=hosts.filter(h=>h.kind==='srv'&&h!==comp)[0];
+  const target=hosts.filter(h=>h.kind==='srv'&&h!==decoy)[0];
+  const ev=[],W=420;
+  hosts.forEach(h=>{const n=ri(1,2);for(let i=0;i<n;i++){const s=pick(sites);ev.push({t:ri(0,W),type:'fw',src:h.ip,dst:s[1],port:443,out:ri(400,4800),dom:s[0]})}});
+  const first={};
+  ev.filter(e=>e.type==='fw'&&e.dom).forEach(e=>{const k=e.src+'|'+e.dom;if(!(k in first)||e.t<first[k].t)first[k]={t:e.t,src:e.src,q:e.dom,ans:e.dst}});
+  Object.keys(first).forEach(k=>{const f=first[k];ev.push({t:Math.max(0,f.t-1),type:'dns',src:f.src,q:f.q,rc:'NOERROR '+f.ans})});
+  const typo=pick(hosts.filter(h=>h.kind==='ws'&&h!==comp));
+  ev.push({t:ri(60,W-1),type:'dns',src:typo.ip,q:'wwww.dailywire-news.example',rc:'NXDOMAIN'});
+  for(let t=ri(0,59);t<W;t+=60)ev.push({t,type:'fw',src:decoy.ip,dst:target.ip,port:8080,out:212,dom:''});
+  const c2={dom:rs(ri(10,13))+'.example',ip:pub(),port:pick([443,8443])};
+  const I=pick([30,45,60]),nx=ri(5,7);
+  let bt=ri(5,40),lastGap=0;const burst0=bt;
+  for(let i=0;i<nx;i++){ev.push({t:bt,type:'dns',src:comp.ip,q:rs(ri(10,13))+'.example',rc:'NXDOMAIN'});lastGap=ri(2,6);bt+=lastGap}
+  const burst1=bt-lastGap;let t=bt+ri(2,5);const c0=t;
+  ev.push({t:t-1,type:'dns',src:comp.ip,q:c2.dom,rc:'NOERROR '+c2.ip});
+  while(t<W){ev.push({t,type:'fw',src:comp.ip,dst:c2.ip,port:c2.port,out:ri(270,330),dom:c2.dom});t+=I+ri(-2,2)}
+  ev.sort((a,b)=>a.t-b.t||(a.type===b.type?0:a.type==='dns'?-1:1));
+  return {seed,hosts,ev,comp,typo,c2,I,nx,burst0,burst1,c0,decoy,target,base:Date.UTC(2026,ri(0,11),ri(1,28),ri(7,15),ri(0,50),0)};
+}
+/*ENDGEN*/
+(function(){
+const $=s=>document.querySelector(s);
+let S,hintN=0;
+const hms=t=>new Date(S.base+t*1000).toISOString().slice(11,19);
+const hn=ip=>S.hosts.find(h=>h.ip===ip).name;
+const line=e=>e.type==='fw'?`${hms(e.t)} fw  ${e.src} > ${e.dst}:${e.port} out=${e.out}${e.dom?' dom='+e.dom:''}`:`${hms(e.t)} dns ${e.src} ${e.q} ${e.rc}`;
+const HINTS=['Regular timing alone is not enough. Look for a destination only one host contacts.','Look through the excerpt for a host that failed several lookups for random-looking names just before it started connecting somewhere.','The compromised host sends nearly the same number of bytes out at an even interval.'];
+const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function renderLog(){
+  const h=$('#fh').value,t=$('#ft').value,q=$('#q').value.trim().toLowerCase();
+  const f=S.ev.filter(e=>(!h||e.src===h)&&(!t||e.type===t)&&(!q||line(e).toLowerCase().includes(q)));
+  $('#log').innerHTML=f.length?f.map(e=>`<span class="${e.type==='dns'?'dns':''}">${esc(line(e))}</span>`).join('\n'):'No events match these filters.';
+  $('#cnt').textContent=`Showing ${f.length} of ${S.ev.length} events`;
+  document.querySelectorAll('#inv tr').forEach(tr=>tr.classList.toggle('sel',!!h&&tr.dataset.ip===h));
+}
+function pickHost(ip){$('#fh').value=$('#fh').value===ip?'':ip;renderLog()}
+function init(seed){
+  S=build(seed);hintN=0;
+  $('#inv').innerHTML=S.hosts.map(h=>`<tr tabindex="0" data-ip="${h.ip}" aria-label="Filter log by ${h.name}"><td class="mono">${h.name}</td><td class="mono">${h.ip}</td><td>${h.role}</td></tr>`).join('');
+  $('#fh').innerHTML='<option value="">All hosts</option>'+S.hosts.map(h=>`<option value="${h.ip}">${h.name} (${h.ip})</option>`).join('');
+  $('#ft').value='';$('#q').value='';$('#fh').value='';renderLog();
+  $('#base').textContent=`Baseline: ${S.decoy.name} runs a health check against ${S.target.name} on port 8080 every 60 seconds. This is expected.`;
+  $('#opts').innerHTML=S.hosts.map(h=>`<label><input type="radio" name="h" value="${h.ip}"><span><span class="mono">${h.name}</span> <span class="note">${h.ip}</span></span></label>`).join('');
+  $('#fb').innerHTML='';$('#why').hidden=true;$('#why').innerHTML='';
+}
+function why(){
+  const c=S.comp,k=S.c2,thr=Math.max(4,S.nx-2);
+  const yaml=`title: DNS NXDOMAIN Lookup
+name: dns_nxdomain
+logsource:
+  product: zeek
+  service: dns
+detection:
+  selection:
+    rcode_name: NXDOMAIN
+  condition: selection
+---
+title: Possible DGA - NXDOMAIN Burst From One Host
+correlation:
+  type: event_count
+  rules:
+    - dns_nxdomain
+  group-by:
+    - id.orig_h
+  timespan: 2m
+  condition:
+    gte: ${thr}
+level: medium`;
+  $('#why').hidden=false;
+  $('#why').innerHTML=`<div class="panel"><h2>Why it is ${c.name}</h2><ul>
+    <li><strong>Failed lookups first.</strong> ${S.nx} NXDOMAIN lookups for random names between ${hms(S.burst0)} and ${hms(S.burst1)}. Malware generating domains looks like this until one resolves.</li>
+    <li><strong>Rare destination.</strong> Then it connects to <span class="mono">${k.dom}</span> (${k.ip}:${k.port}), a random-looking name no other host contacts.</li>
+    <li><strong>Even interval.</strong> About every ${S.I} seconds, give or take 2.</li>
+    <li><strong>Same size each time.</strong> Roughly 270 to 330 bytes out.</li></ul>
+    <p><strong>The decoy:</strong> ${S.decoy.name} contacts ${S.target.name} every 60 seconds. It is regular too, but it is the expected internal health check from the baseline. Regularity is a lead, not proof. Also, ${S.typo.name} has one failed lookup for a misspelled name. One failure is not a burst.</p></div>
+  <div class="panel"><h2>What is a Sigma rule?</h2>
+    <p>Sigma is an open, vendor-neutral way to write a detection in YAML. You write it once, then convert it to the query language of a supported SIEM or log platform, such as Splunk or Elasticsearch. This example detects only a burst of failed lookups from one host. It does not detect that a name looks random, or that connections are evenly timed:</p>
+    <pre>${yaml}</pre>
+    <p class="note">This rule is written for Zeek dns.log, where the field is rcode_name. Map the field names to your own log source. The Sigma documentation lists correlation support for only some backends (Splunk, Elasticsearch ES|QL, Grafana Loki, SQL and OpenSearch), so test the conversion. Sigma correlation rules can count events, count distinct values, and sum, average or take percentiles of a field, but they have no way to test for evenly spaced timing. That check is a statistical query in your SIEM.</p></div>
+  <div class="panel"><h2>Response</h2><ul>
+    <li>Isolate ${c.name}. Capture memory before shutting it down.</li>
+    <li>Block ${k.dom} at DNS and ${k.ip} at the firewall.</li>
+    <li>Search logs for any other host contacting them.</li>
+    <li>Find the persistence and entry point, then reimage and reset credentials.</li></ul></div>`;
+}
+['#fh','#ft'].forEach(x=>$(x).addEventListener('change',renderLog));
+$('#q').addEventListener('input',renderLog);
+$('#clr').addEventListener('click',()=>{$('#fh').value='';$('#ft').value='';$('#q').value='';renderLog()});
+$('#exp').addEventListener('click',()=>{const b=$('#log').classList.toggle('big');$('#exp').setAttribute('aria-pressed',b);$('#exp').textContent=b?'Collapse log':'Expand log'});
+$('#inv').addEventListener('click',e=>{const tr=e.target.closest('tr');if(tr)pickHost(tr.dataset.ip)});
+$('#inv').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const tr=e.target.closest('tr');if(tr){e.preventDefault();pickHost(tr.dataset.ip)}}});
+$('#check').addEventListener('click',()=>{
+  const r=document.querySelector('input[name=h]:checked');
+  if(!r){$('#fb').innerHTML='<div class="fb bad">Select a host first.</div>';return}
+  if(r.value===S.comp.ip){$('#fb').innerHTML=`<div class="fb ok"><strong>Correct: ${S.comp.name}.</strong></div>`;why()}
+  else $('#fb').innerHTML='<div class="fb bad"><strong>Not that one.</strong> Look again at which host contacts a destination nobody else does.</div>';
+});
+$('#hint').addEventListener('click',()=>{$('#fb').innerHTML=`<div class="fb">${HINTS[hintN]}</div>`;hintN=Math.min(hintN+1,2)});
+$('#newbtn').addEventListener('click',()=>init(Math.floor(Math.random()*4294967295)));
+init(Math.floor(Math.random()*4294967295));
+})();
+</script>
+
+</body>
+</html>

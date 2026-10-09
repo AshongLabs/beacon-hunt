@@ -1,0 +1,21 @@
+title: DNS NXDOMAIN Lookup
+name: dns_nxdomain
+logsource:
+  product: zeek
+  service: dns
+detection:
+  selection:
+    rcode_name: NXDOMAIN
+  condition: selection
+---
+title: Possible DGA - NXDOMAIN Burst From One Host
+correlation:
+  type: event_count
+  rules:
+    - dns_nxdomain
+  group-by:
+    - id.orig_h
+  timespan: 2m
+  condition:
+    gte: 4
+level: medium
