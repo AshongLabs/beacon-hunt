@@ -38,19 +38,19 @@ Everything runs in a single web page. There is nothing to install and no account
 
 ## How to play
 
-1. **Read the asset list.** It lists the seven machines with their names, IP addresses and roles. The logs show IP addresses, not names, so use this table to translate.
-2. **Read the baseline note.** It tells you about one kind of traffic that is expected and safe, so you don't mistake it for an attack.
-3. **Read the log excerpt.** Each line is one event.
-   - Firewall lines look like: `07:42:10 fw  10.20.4.37 > 203.0.113.9:443 out=312 dom=example.example`. That means: at 07:42:10, the machine `10.20.4.37` connected to `203.0.113.9` on port `443`, sent `312` bytes, and the domain involved was `example.example`.
-   - DNS lines look like: `07:42:09 dns 10.20.4.37 example.example NOERROR 203.0.113.9`. That means: at 07:42:09, `10.20.4.37` asked for the address of that name, and the DNS server answered successfully (`NOERROR`) with that IP. A result of `NXDOMAIN` means the lookup failed because the name doesn't exist.
-4. **Filter the evidence.** Above the log you can pick a host, show only DNS or only firewall lines, or search for any text such as `NXDOMAIN` or an IP address. You can also click a host in the asset table to filter the log to that host. Filtering is just for investigating: it does **not** pick your answer. **Expand log** shows the whole log at once.
-5. **Choose the compromised host** and press **Check answer**. Stuck? The **Hint** button gives you a nudge without giving it away. If you pick the wrong host, the page tells you what that host's behavior shows and what is missing, and you can try again. After two wrong tries a **Show the answer** button appears.
-6. **Explain your evidence.** After a correct answer, the page asks: *What evidence supports your conclusion?* Choose up to two observations from a short list. Every statement is true of the log you are looking at, but some are strong evidence, some are weak on their own, and some are explained by the baseline. You get feedback on your reasoning, not just on your answer. More than one combination can be valid.
-7. **Read the explanation.** The page shows what the log shows about the infected host, with example log lines from your scenario, why the most misleading machine was ruled out, and what the example detection rule would and would not catch.
-8. Press **New scenario** to try again. Hostnames, addresses, domains, timing and the infected machine are all randomized each time.
-9. **Pick a difficulty.** The **Difficulty** menu at the top has two settings:
+1. **Pick a difficulty.** The **Difficulty** menu at the top has two settings:
    - **Easy** is the guided version. The infected machine shows every sign together: failed lookups for random names, then steady check-ins to a destination nobody else contacts.
    - **Hard** removes the shortcut. A clean machine also produces a burst of failed lookups (for a name that no longer exists, which is a harmless leftover setting, not malware). In about half of Hard scenarios the infected machine makes no failed lookups at all and connects straight to an IP address. Some clean machines are much busier than others, ordinary traffic comes in small sizes too, and one clean machine makes regular connections of its own (an expected time sync, described in the baseline). Some scenarios also include a clean machine that talks to an approved external service that no other machine uses, and the baseline says so. Check-in timing and sizes are also a bit less exact. Use the baseline to rule out what is expected.
+2. **Read the asset list.** It lists the seven machines with their names, IP addresses and roles. The logs show IP addresses, not names, so use this table to translate.
+3. **Read the baseline note.** It lists the traffic that is expected and safe, so you don't mistake it for an attack. Easy has one entry; Hard has two or three.
+4. **Read the log excerpt.** Each line is one event.
+   - Firewall lines look like: `07:42:10 fw  10.20.4.37 > 203.0.113.9:443 out=312 dom=example.example`. That means: at 07:42:10, the machine `10.20.4.37` connected to `203.0.113.9` on port `443`, sent `312` bytes, and the domain involved was `example.example`.
+   - DNS lines look like: `07:42:09 dns 10.20.4.37 example.example NOERROR 203.0.113.9`. That means: at 07:42:09, `10.20.4.37` asked for the address of that name, and the DNS server answered successfully (`NOERROR`) with that IP. A result of `NXDOMAIN` means the lookup failed because the name doesn't exist.
+5. **Filter the evidence.** Above the log you can pick a host, show only DNS or only firewall lines, or search for any text such as `NXDOMAIN` or an IP address. You can also click a host in the asset table to filter the log to that host. Filtering is just for investigating: it does **not** pick your answer. **Expand log** shows the whole log at once.
+6. **Choose the compromised host** and press **Check answer**. Stuck? The **Hint** button gives you a nudge without giving it away. If you pick the wrong host, the page tells you what that host's behavior shows and what is missing, and you can try again. After two wrong tries a **Show the answer** button appears.
+7. **Explain your evidence.** After a correct answer, the page asks: *What evidence supports your conclusion?* Choose up to two observations from a short list. Every statement is true of the log you are looking at, but some are strong evidence, some are weak on their own, and some are explained by the baseline. You get feedback on your reasoning, not just on your answer. More than one combination can be valid.
+8. **Read the explanation.** The page shows what the log shows about the infected host, with example log lines from your scenario, why the most misleading machine was ruled out, and what the example detection rule would and would not catch.
+9. Press **New scenario** to try again. Hostnames, addresses, domains, timing and the infected machine are all randomized each time.
 
 <details>
 <summary>Spoiler-light guide: what to look for</summary>
@@ -67,7 +67,7 @@ Everything runs in a single web page. There is nothing to install and no account
 ## What you'll learn
 
 - **Regular timing alone is not proof of beaconing.** Time servers, vendor software and internal health checks are all evenly spaced too. Real analysts avoid jumping to conclusions from one clue.
-- **Evidence is stronger in combination.** The infected machine in this exercise shows several signs together: a burst of failed lookups for random-looking names, then evenly spaced connections to a destination no other machine contacts, each sending nearly the same small amount of data.
+- **Evidence is stronger in combination.** On Easy, the infected machine shows several signs together: a burst of failed lookups for random-looking names, then evenly spaced connections to a destination no other machine contacts, each sending nearly the same small amount of data.
 - **A single signal can mislead in both directions.** On Hard, the failed-lookup clue points at an innocent machine, or misses the infected one. Combining clues is what keeps you right.
 - **How to separate the unusual from the normal** by using a baseline and by filtering and comparing logs.
 - **How a human finding becomes an automatic detection** through a rule written in Sigma.
@@ -115,9 +115,9 @@ This is a learning example, not a ready-to-use detection. Please read these befo
 
 The page contains a small generator, the `build(seed)` function in `index.html` (between the `GEN` markers). Starting from a random number (the *seed*), it builds a scenario step by step:
 
-1. It invents seven hosts with random names and IP addresses.
+1. It invents seven hosts with random IP addresses: five workstations with random names and two servers named from a short list.
 2. It adds normal traffic: a little web browsing, DNS lookups for each site visited, and a steady internal health check between the two servers.
-3. It adds one harmless typo (a single failed lookup) on a different machine, as a decoy. On Hard, it also gives a second clean workstation a burst of failed lookups for the same retired name, picked from a short list of names. It makes one or two clean workstations much busier than the rest, adds an expected, regular time sync from one clean machine, and sometimes adds a clean machine that uses an approved external service no other machine contacts. The baseline lists each of these.
+3. It adds one harmless typo (a single failed lookup) on a different machine, as a decoy. On Hard, it also gives a second clean workstation a burst of failed lookups for the same retired name, picked from a short list of names. It makes one or two clean workstations much busier than the rest, adds an expected, regular time sync from one clean machine, and sometimes adds a clean machine that uses an approved external service no other machine contacts. The baseline lists the time sync and the approved service. The busy workstations and the failed-lookup burst are left for you to judge.
 4. It picks one host to be infected. That host fails several lookups for random names, then starts contacting a made-up C2 domain at a steady interval, always sending a similar small amount of data. On Hard, about half the time the host skips the lookups and contacts a bare IP address instead, and the interval and size vary a little more.
 5. It sorts every event by time and displays them as the log.
 
