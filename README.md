@@ -1,5 +1,7 @@
 # Beacon Hunt
 
+**Live demo:** https://ashonglabs.github.io/beacon-hunt/
+
 **Beacon Hunt is a short, hands-on exercise for learning how security analysts spot an infected computer by reading network logs.**
 
 You get a small network: five workstations (everyday employee computers) and two servers. You also get a short excerpt of the logs that the network's firewall and DNS server recorded. One of those machines has been infected with malware and is secretly "calling home" to an attacker's server. Your job is to work out which one, using only the evidence in the logs.
@@ -42,9 +44,13 @@ Everything runs in a single web page. There is nothing to install and no account
    - Firewall lines look like: `07:42:10 fw  10.20.4.37 > 203.0.113.9:443 out=312 dom=example.example`. That means: at 07:42:10, the machine `10.20.4.37` connected to `203.0.113.9` on port `443`, sent `312` bytes, and the domain involved was `example.example`.
    - DNS lines look like: `07:42:09 dns 10.20.4.37 example.example NOERROR 203.0.113.9`. That means: at 07:42:09, `10.20.4.37` asked for the address of that name, and the DNS server answered successfully (`NOERROR`) with that IP. A result of `NXDOMAIN` means the lookup failed because the name doesn't exist.
 4. **Filter the evidence.** Above the log you can pick a host, show only DNS or only firewall lines, or search for any text such as `NXDOMAIN` or an IP address. You can also click a host in the asset table to filter the log to that host. Filtering is just for investigating: it does **not** pick your answer. **Expand log** shows the whole log at once.
-5. **Choose the compromised host** and press **Check answer**. Stuck? The **Hint** button gives you a nudge without giving it away.
-6. **Read the explanation.** After a correct answer, the page shows exactly why that host is infected, why the lookalike machines are not, an example detection rule, and what a team would do next.
-7. Press **New scenario** to try again. Hostnames, addresses, domains, timing and the infected machine are all randomized each time.
+5. **Choose the compromised host** and press **Check answer**. Stuck? The **Hint** button gives you a nudge without giving it away. If you pick the wrong host, the page tells you what that host's behavior shows and what is missing, and you can try again. After two wrong tries a **Show the answer** button appears.
+6. **Explain your evidence.** After a correct answer, the page asks: *What evidence supports your conclusion?* Choose up to two observations from a short list. Every statement is true of the log you are looking at, but some are strong evidence, some are weak on their own, and some are explained by the baseline. You get feedback on your reasoning, not just on your answer. More than one combination can be valid.
+7. **Read the explanation.** The page shows what the log shows about the infected host, with example log lines from your scenario, why the most misleading machine was ruled out, and what the example detection rule would and would not catch.
+8. Press **New scenario** to try again. Hostnames, addresses, domains, timing and the infected machine are all randomized each time.
+9. **Pick a difficulty.** The **Difficulty** menu at the top has two settings:
+   - **Easy** is the guided version. The infected machine shows every sign together: failed lookups for random names, then steady check-ins to a destination nobody else contacts.
+   - **Hard** removes the shortcut. A clean machine also produces a burst of failed lookups (for a name that no longer exists, which is a harmless leftover setting, not malware). In about half of Hard scenarios the infected machine makes no failed lookups at all and connects straight to an IP address. Some clean machines are much busier than others, ordinary traffic comes in small sizes too, and one clean machine makes regular connections of its own (an expected time sync, described in the baseline). Some scenarios also include a clean machine that talks to an approved external service that no other machine uses, and the baseline says so. Check-in timing and sizes are also a bit less exact. Use the baseline to rule out what is expected.
 
 <details>
 <summary>Spoiler-light guide: what to look for</summary>
@@ -54,12 +60,15 @@ Everything runs in a single web page. There is nothing to install and no account
 - **Check the DNS log for failures.** A burst of failed lookups for random-looking names, just before a machine starts talking to a new destination, is a classic sign.
 - **Compare payload sizes.** Beacons often send nearly the same tiny amount of data every time.
 - **Use the baseline** to rule out expected traffic.
+- **A busy host is not a suspicious host.** The infected machine can have the most connections, or not. Count alone proves nothing.
+- **On Hard, don't trust one clue.** Failed lookups can come from a clean machine, and an infected machine may make none. Check each host's connections: who keeps contacting a destination nobody else does?
 </details>
 
 ## What you'll learn
 
 - **Regular timing alone is not proof of beaconing.** Time servers, vendor software and internal health checks are all evenly spaced too. Real analysts avoid jumping to conclusions from one clue.
 - **Evidence is stronger in combination.** The infected machine in this exercise shows several signs together: a burst of failed lookups for random-looking names, then evenly spaced connections to a destination no other machine contacts, each sending nearly the same small amount of data.
+- **A single signal can mislead in both directions.** On Hard, the failed-lookup clue points at an innocent machine, or misses the infected one. Combining clues is what keeps you right.
 - **How to separate the unusual from the normal** by using a baseline and by filtering and comparing logs.
 - **How a human finding becomes an automatic detection** through a rule written in Sigma.
 
@@ -97,6 +106,8 @@ This is a learning example, not a ready-to-use detection. Please read these befo
 - **It has not been run against real logs.** The conversion only proves the rule is valid Sigma and that the tool can translate it.
 - **Time blocks are fixed.** `bin _time span=2m` cuts time into set 2-minute blocks instead of a moving window. A burst that straddles the edge of two blocks can be split into two counts that are each too low to alert. A real deployment would need tuning.
 - **No log location is specified.** I used `--without-pipeline`, because none of the predefined Splunk pipelines is designed for Zeek. A *pipeline* is a set of translation settings that tells the tool where your logs live and what fields are called. As a result, the query doesn't say which Splunk index or sourcetype to search, and your field names may differ depending on how your Zeek logs are collected.
+- **On Hard, the rule can be wrong.** It will alert on a clean machine that retries a dead name, and it will miss an infected machine that never fails a lookup. That is intentional. A rule on failed lookups is one signal, not a full detection.
+- **The evidence step is a teaching judgment.** Which observations count as strong or weak is decided by the exercise's author for a beginner level. It is not an industry standard. Real investigations also use endpoint evidence that a log excerpt cannot show.
 - **Sigma can't check for even spacing.** Sigma can count events, but it has no way to test whether connections are evenly spaced in time. Spotting regular beacon intervals is a statistical job done in your SIEM.
 - **Backend support varies.** Not every tool supports Sigma correlation rules. See the [Sigma correlation documentation](https://sigmahq.io/docs/meta/correlations.html).
 
@@ -106,11 +117,11 @@ The page contains a small generator, the `build(seed)` function in `index.html` 
 
 1. It invents seven hosts with random names and IP addresses.
 2. It adds normal traffic: a little web browsing, DNS lookups for each site visited, and a steady internal health check between the two servers.
-3. It adds one harmless typo (a single failed lookup) on a different machine, as a decoy.
-4. It picks one host to be infected. That host fails several lookups for random names, then starts contacting a made-up C2 domain at a steady interval, always sending a similar small amount of data.
+3. It adds one harmless typo (a single failed lookup) on a different machine, as a decoy. On Hard, it also gives a second clean workstation a burst of failed lookups for the same retired name, picked from a short list of names. It makes one or two clean workstations much busier than the rest, adds an expected, regular time sync from one clean machine, and sometimes adds a clean machine that uses an approved external service no other machine contacts. The baseline lists each of these.
+4. It picks one host to be infected. That host fails several lookups for random names, then starts contacting a made-up C2 domain at a steady interval, always sending a similar small amount of data. On Hard, about half the time the host skips the lookups and contacts a bare IP address instead, and the interval and size vary a little more.
 5. It sorts every event by time and displays them as the log.
 
-The explanation shown after a correct answer is generated from the same values, so it always matches the log you were looking at.
+The evidence choices, the feedback for wrong answers and the final explanation are all worked out from the events in the generated log (counts, times, intervals and sizes), so they match the log you were looking at.
 
 ## About the data
 

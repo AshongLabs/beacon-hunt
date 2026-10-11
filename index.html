@@ -43,7 +43,10 @@ pre{font-family:var(--f-mono);font-size:12.5px;line-height:1.7;background:var(--
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 .btn:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .fb{padding:10px 12px;border-left:4px solid var(--line);background:var(--bg);margin-top:4px}
-.fb.ok{border-color:var(--ok)}.fb.bad{border-color:var(--bad)}
+.fb.ok{border-color:var(--ok)}.fb.bad{border-color:var(--bad)}.fb.mid{border-color:var(--accent)}
+.fb ul{padding-left:18px}
+#evleg:focus{outline:none}
+.opts input:disabled+span{opacity:.55}
 ul{margin:0 0 10px;padding-left:20px}li{margin-bottom:5px;max-width:66ch}
 .note{font-size:12.5px;color:var(--muted)}
 #log{max-height:440px;overflow:auto}
@@ -56,22 +59,25 @@ ul{margin:0 0 10px;padding-left:20px}li{margin-bottom:5px;max-width:66ch}
 select:focus-visible,#inv tr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 fieldset{border:0;padding:0;margin:0;min-width:0}
 legend{font-family:var(--f-display);font-size:1.4rem;text-transform:uppercase;letter-spacing:.03em;padding:0;margin:0 0 8px}
+.sel{background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:7px 10px;font:inherit;border-radius:3px}
+.sel:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 </style>
+
 <style>body{margin:0}</style>
 </head>
 <body>
-
 <div class="wrap">
 <header>
   <div><h1>Beacon Hunt</h1><p class="note" style="margin:6px 0 0">One of these machines is calling home to a command-and-control server.</p></div>
-  <button class="btn ghost" id="newbtn" type="button">New scenario</button>
+  <div class="row"><label class="note" for="mode" style="margin:0">Difficulty</label><select id="mode" class="sel"><option value="easy">Easy</option><option value="hard">Hard</option></select><button class="btn ghost" id="newbtn" type="button">New scenario</button></div>
 </header>
 
 <div class="panel">
   <h2>Assets</h2>
   <div class="scroll"><table><thead><tr><th>Hostname</th><th>IP address</th><th>Role</th></tr></thead><tbody id="inv"></tbody></table></div>
-  <p class="note" id="base" style="margin:10px 0 0"></p>
+  <p class="note" style="margin:10px 0 4px"><strong>Baseline (expected traffic):</strong></p>
+  <ul class="note" id="base" style="margin:0"></ul>
 </div>
 
 <div class="panel">
@@ -91,8 +97,18 @@ legend{font-family:var(--f-display);font-size:1.4rem;text-transform:uppercase;le
 <div class="panel">
   <fieldset><legend>Which host is compromised?</legend>
   <div class="opts" id="opts"></div></fieldset>
-  <div class="row"><button class="btn" id="check" type="button">Check answer</button><button class="btn ghost" id="hint" type="button">Hint</button></div>
+  <div class="row"><button class="btn" id="check" type="button">Check answer</button><button class="btn ghost" id="hint" type="button">Hint</button><button class="btn ghost" id="reveal" type="button" hidden>Show the answer</button></div>
   <div id="fb" aria-live="polite" style="margin-top:12px"></div>
+</div>
+
+<div class="panel" id="evp" hidden>
+  <form id="evform" onsubmit="return false">
+  <fieldset><legend id="evleg" tabindex="-1">What evidence supports your conclusion?</legend>
+  <p class="note">Choose up to two. Every statement is true of this log. Some are stronger evidence than others.</p>
+  <div class="opts" id="evopts"></div></fieldset>
+  <div class="row"><button class="btn" id="evcheck" type="button">Check evidence</button></div>
+  <div id="evfb" aria-live="polite" style="margin-top:12px"></div>
+  </form>
 </div>
 
 <div id="why" hidden></div>
@@ -102,7 +118,8 @@ legend{font-family:var(--f-display);font-size:1.4rem;text-transform:uppercase;le
 <script>
 /*GEN*/
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-function build(seed){
+function build(seed,mode){
+  const hard=mode==='hard';
   const R=mulberry32(seed);
   const ri=(a,b)=>a+Math.floor(R()*(b-a+1));
   const pick=a=>a[Math.floor(R()*a.length)];
@@ -121,32 +138,216 @@ function build(seed){
   const decoy=hosts.filter(h=>h.kind==='srv'&&h!==comp)[0];
   const target=hosts.filter(h=>h.kind==='srv'&&h!==decoy)[0];
   const ev=[],W=420;
-  hosts.forEach(h=>{const n=ri(1,2);for(let i=0;i<n;i++){const s=pick(sites);ev.push({t:ri(0,W),type:'fw',src:h.ip,dst:s[1],port:443,out:ri(400,4800),dom:s[0]})}});
+  const bsz=()=>hard&&R()<0.35?ri(120,600):ri(400,4800);
+  hosts.forEach(h=>{const n=ri(1,2);for(let i=0;i<n;i++){const s=pick(sites);ev.push({t:ri(0,W),type:'fw',src:h.ip,dst:s[1],port:443,out:bsz(),dom:s[0]})}});
+  if(hard){
+    const cleanWs=hosts.filter(h=>h!==comp&&h.kind==='ws');
+    const busy=[pick(cleanWs)];
+    if(R()<0.6)busy.push(pick(cleanWs.filter(h=>h!==busy[0])));
+    busy.forEach(h=>{const n=ri(10,20);for(let i=0;i<n;i++){const s=pick(sites);ev.push({t:ri(0,W),type:'fw',src:h.ip,dst:s[1],port:443,out:bsz(),dom:s[0]})}});
+    sites.forEach(s=>{const who=new Set(ev.filter(e=>e.type==='fw'&&e.dst===s[1]).map(e=>e.src));
+      while(who.size<2){const h=pick(hosts);if(who.has(h.ip))continue;who.add(h.ip);ev.push({t:ri(0,W),type:'fw',src:h.ip,dst:s[1],port:443,out:bsz(),dom:s[0]})}});
+  }
+  let lh=null,svc=null;
+  if(hard&&R()<0.5){
+    lh=pick(hosts.filter(h=>h!==comp));
+    const SV=[['agent.endpointcare.example','its endpoint management agent',['ws','srv']],['upload.backupvault.example','its scheduled offsite backup upload',['srv']],['api.payroll-hub.example','the payroll service its user works with',['ws']]];
+    const sv=pick(SV.filter(x=>x[2].includes(lh.kind)));
+    svc={dom:sv[0],purpose:sv[1],ip:pub(),port:443};
+    const n=ri(3,4),t0=ri(0,100),gp=ri(90,130);
+    for(let i=0;i<n;i++){const t=t0+i*gp+ri(-8,8);if(t>=0&&t<W)ev.push({t,type:'fw',src:lh.ip,dst:svc.ip,port:443,out:ri(300,900),dom:svc.dom})}
+  }
   const first={};
   ev.filter(e=>e.type==='fw'&&e.dom).forEach(e=>{const k=e.src+'|'+e.dom;if(!(k in first)||e.t<first[k].t)first[k]={t:e.t,src:e.src,q:e.dom,ans:e.dst}});
   Object.keys(first).forEach(k=>{const f=first[k];ev.push({t:Math.max(0,f.t-1),type:'dns',src:f.src,q:f.q,rc:'NOERROR '+f.ans})});
   const typo=pick(hosts.filter(h=>h.kind==='ws'&&h!==comp));
   ev.push({t:ri(60,W-1),type:'dns',src:typo.ip,q:'wwww.dailywire-news.example',rc:'NXDOMAIN'});
   for(let t=ri(0,59);t<W;t+=60)ev.push({t,type:'fw',src:decoy.ip,dst:target.ip,port:8080,out:212,dom:''});
-  const c2={dom:rs(ri(10,13))+'.example',ip:pub(),port:pick([443,8443])};
-  const I=pick([30,45,60]),nx=ri(5,7);
-  let bt=ri(5,40),lastGap=0;const burst0=bt;
-  for(let i=0;i<nx;i++){ev.push({t:bt,type:'dns',src:comp.ip,q:rs(ri(10,13))+'.example',rc:'NXDOMAIN'});lastGap=ri(2,6);bt+=lastGap}
-  const burst1=bt-lastGap;let t=bt+ri(2,5);const c0=t;
-  ev.push({t:t-1,type:'dns',src:comp.ip,q:c2.dom,rc:'NOERROR '+c2.ip});
-  while(t<W){ev.push({t,type:'fw',src:comp.ip,dst:c2.ip,port:c2.port,out:ri(270,330),dom:c2.dom});t+=I+ri(-2,2)}
+  let ntp=null,ntpIp='';
+  if(hard){ntp=pick(hosts.filter(h=>h!==comp));ntpIp=pub();for(let t=ri(0,63);t<W;t+=64+ri(-1,1))ev.push({t,type:'fw',src:ntp.ip,dst:ntpIp,port:123,out:76,dom:''})}
+  const noBurst=hard&&R()<0.5;
+  const J=hard?5:2,lo=hard?250:270,hi=hard?350:330;
+  let dh=null,dn=0,dq='';
+  if(hard){
+    dh=pick(hosts.filter(h=>h.kind==='ws'&&h!==comp&&h!==typo));
+    dn=ri(5,6);dq=pick(['intranet-old.corp.example','print-srv2.corp.example','fileshare-legacy.corp.example','vpn-backup.corp.example','wiki-archive.corp.example']);
+    let dt=ri(5,W-80);
+    for(let i=0;i<dn;i++){ev.push({t:dt,type:'dns',src:dh.ip,q:dq,rc:'NXDOMAIN'});dt+=ri(3,8)}
+  }
+  const c2={dom:noBurst?'':rs(ri(10,13))+'.example',ip:pub(),port:pick([443,8443])};
+  const I=pick([30,45,60]);
+  let nx=0,burst0=0,burst1=0,c0=0;
+  if(noBurst){
+    let t=ri(10,60);c0=t;
+    while(t<W){ev.push({t,type:'fw',src:comp.ip,dst:c2.ip,port:c2.port,out:ri(lo,hi),dom:''});t+=I+ri(-J,J)}
+  }else{
+    nx=ri(5,7);
+    let bt=ri(5,40),lastGap=0;burst0=bt;
+    for(let i=0;i<nx;i++){ev.push({t:bt,type:'dns',src:comp.ip,q:rs(ri(10,13))+'.example',rc:'NXDOMAIN'});lastGap=ri(2,6);bt+=lastGap}
+    burst1=bt-lastGap;let t=bt+ri(2,5);c0=t;
+    ev.push({t:t-1,type:'dns',src:comp.ip,q:c2.dom,rc:'NOERROR '+c2.ip});
+    while(t<W){ev.push({t,type:'fw',src:comp.ip,dst:c2.ip,port:c2.port,out:ri(lo,hi),dom:c2.dom});t+=I+ri(-J,J)}
+  }
+  const thr=noBurst?4:Math.max(4,nx-2);
   ev.sort((a,b)=>a.t-b.t||(a.type===b.type?0:a.type==='dns'?-1:1));
-  return {seed,hosts,ev,comp,typo,c2,I,nx,burst0,burst1,c0,decoy,target,base:Date.UTC(2026,ri(0,11),ri(1,28),ri(7,15),ri(0,50),0)};
+  return {seed,mode:hard?'hard':'easy',hosts,ev,comp,typo,c2,I,J,lo,hi,nx,noBurst,burst0,burst1,c0,thr,dh,dn,dq,ntp,ntpIp,lh,svc,decoy,target,base:Date.UTC(2026,ri(0,11),ri(1,28),ri(7,15),ri(0,50),0)};
 }
 /*ENDGEN*/
+/*LOGIC*/
+const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+/* Everything below reads the generated events. Roles (S.comp, S.dh, ...) say who is who; numbers and times come from the log lines. */
+function facts(S){
+  const hms=t=>new Date(S.base+t*1000).toISOString().slice(11,19);
+  const isInt=ip=>ip.startsWith('10.');
+  const fw=S.ev.filter(e=>e.type==='fw'),ext=fw.filter(e=>!isInt(e.dst));
+  const line=e=>e.type==='fw'?`${hms(e.t)} fw  ${e.src} > ${e.dst}:${e.port} out=${e.out}${e.dom?' dom='+e.dom:''}`:`${hms(e.t)} dns ${e.src} ${e.q} ${e.rc}`;
+  const cnt={};S.hosts.forEach(h=>cnt[h.ip]=0);ext.forEach(e=>cnt[e.src]++);
+  const mx=Math.max(...Object.values(cnt)),top=S.hosts.filter(h=>cnt[h.ip]===mx);
+  const dstHosts={};fw.forEach(e=>(dstHosts[e.dst]=dstHosts[e.dst]||new Set()).add(e.src));
+  const sharedShare=h=>{const m=ext.filter(e=>e.src===h.ip);return m.length?m.filter(e=>dstHosts[e.dst].size>1).length/m.length:0};
+  const gaps=a=>{const t=a.map(e=>e.t).sort((x,y)=>x-y),g=[];for(let i=1;i<t.length;i++)g.push(t[i]-t[i-1]);return g};
+  const lohi=a=>[Math.min(...a),Math.max(...a)];
+  const flows=(src,dst)=>fw.filter(e=>e.src===src&&e.dst===dst).sort((a,b)=>a.t-b.t);
+  const c2=flows(S.comp.ip,S.c2.ip),[g0,g1]=lohi(gaps(c2)),[o0,o1]=lohi(c2.map(e=>e.out));
+  const nxOf=ip=>S.ev.filter(e=>e.rc==='NXDOMAIN'&&e.src===ip).sort((a,b)=>a.t-b.t);
+  const compNx=nxOf(S.comp.ip);
+  const resolve=S.ev.find(e=>e.type==='dns'&&e.src===S.comp.ip&&e.rc==='NOERROR '+S.c2.ip)||null;
+  const hc=flows(S.decoy.ip,S.target.ip),[h0,h1]=lohi(gaps(hc));
+  const ntp=S.ntp?flows(S.ntp.ip,S.ntpIp):[];
+  const svc=S.svc?flows(S.lh.ip,S.svc.ip):[];
+  const dhNx=S.dh?nxOf(S.dh.ip):[];
+  const typoNx=nxOf(S.typo.ip);
+  const ntpGaps=ntp.length>1?lohi(gaps(ntp)):[0,0];
+  return {hms,line,cnt,mx,top,sharedShare,c2,g0,g1,o0,o1,compNx,resolve,hc,h0,h1,ntp,ntpGaps,svc,dhNx,typoNx,dstHosts,flows};
+}
+
+/* Evidence options: every statement is true of the current log. grade = good | weak | base (explained by the baseline). */
+function evidence(S){
+  const f=facts(S),c=S.comp,k=S.c2,o=[];
+  const dest=k.dom?`${k.dom} (${k.ip}:${k.port})`:`${k.ip}:${k.port}`;
+  o.push({id:'rare',grade:'good',text:`${c.name} connected ${f.c2.length} times to ${dest}, a destination no other host contacts and no baseline entry explains.`,
+    why:'A repeated destination that only one host contacts and the baseline does not explain is the strongest lead in this log.'});
+  o.push({id:'steady',grade:'good',text:`Those ${f.c2.length} connections were steady: ${f.g0} to ${f.g1} seconds apart, ${f.o0} to ${f.o1} bytes out each time.`,
+    why:'Steady timing and similar sizes fit beaconing. On their own they are not proof, because expected traffic is regular too, so pair this with the destination.'});
+  if(!S.noBurst&&f.resolve){
+    o.push({id:'dga',grade:'good',text:`${c.name} had ${f.compNx.length} failed lookups for random-looking names (${f.hms(f.compNx[0].t)} to ${f.hms(f.compNx[f.compNx.length-1].t)}). At ${f.hms(f.resolve.t)} it looked up ${k.dom}, which resolved to ${k.ip}, and connections to that address followed.`,
+      why:'Failed lookups followed by a successful lookup and then connections to that address fit a domain-generating beacon. The sequence matters, not just the failures.'});
+  }else{
+    o.push({id:'bare',grade:'weak',text:`${c.name} connected directly to ${k.ip}:${k.port}. No DNS lookup for that address appears in the excerpt.`,
+      why:'A missing lookup is only an absence in this excerpt, and expected traffic can skip DNS too. It matters only together with an unexplained, repeated destination.'});
+  }
+  const t0=f.top[0],tied=f.top.length>1?` (tied with ${f.top.length-1} other host${f.top.length>2?'s':''})`:'';
+  const topShared=f.sharedShare(t0);
+  o.push({id:'busy',grade:'weak',text:`${t0.name} made the most external connections (${f.mx})${tied}.`,
+    why:t0===c?'True here, but weak. Connection count alone is not evidence: a busy clean workstation can have as many or more. In this log the count is high mostly because of the repeating beacon traffic.'
+      :(topShared>=0.5?'That host is busy, but most of its connections go to websites other hosts also visit. Volume alone does not show a compromise.':'A high connection count alone does not show a compromise.')});
+  o.push({id:'health',grade:'base',text:`${S.decoy.name} connects to ${S.target.name} on port 8080 every ${f.h0===f.h1?f.h0:f.h0+' to '+f.h1} seconds.`,
+    why:'Regular, but it is the internal health check listed in the baseline.'});
+  if(S.ntp)o.push({id:'ntp',grade:'base',text:`${S.ntp.name} connects to ${S.ntpIp} on port 123 about every ${f.ntpGaps[0]===f.ntpGaps[1]?f.ntpGaps[0]:f.ntpGaps[0]+' to '+f.ntpGaps[1]} seconds, ${f.ntp[0].out} bytes each time.`,
+    why:'Regular and small, and only that host contacts the address, but the baseline lists it as time sync.'});
+  if(S.dh)o.push({id:'dnsburst',grade:'weak',text:`${S.dh.name} had ${f.dhNx.length} failed lookups for ${S.dq} (${f.hms(f.dhNx[0].t)} to ${f.hms(f.dhNx[f.dhNx.length-1].t)}).`,
+    why:'Failed lookups show that something could not resolve a name. They do not show malicious traffic: this is one name retried, and it is not followed by repeating traffic the baseline fails to explain.'});
+  else o.push({id:'typo',grade:'weak',text:`${S.typo.name} had one failed lookup, for ${f.typoNx[0].q}.`,
+    why:'One failed lookup is a typo, not a burst. It says nothing about where the host connects.'});
+  if(S.svc)o.push({id:'svc',grade:'base',text:`${S.lh.name} connected ${f.svc.length} times to ${S.svc.dom} (${S.svc.ip}:${S.svc.port}), a destination no other host contacts.`,
+    why:`Only one host contacts it, but the baseline lists it as an approved service: ${S.svc.purpose}. A unique destination is only suspicious when nothing explains it.`});
+  let list=o;
+  if(list.length>7)list=list.filter(x=>x.id!=='health');
+  const R=mulberry32((S.seed^0x9E3779B9)>>>0);
+  for(let i=list.length-1;i>0;i--){const j=Math.floor(R()*(i+1));[list[i],list[j]]=[list[j],list[i]]}
+  return list;
+}
+
+function gradeEvidence(S,ids){
+  const opts=evidence(S),sel=ids.map(id=>opts.find(x=>x.id===id)).filter(Boolean);
+  const good=sel.filter(x=>x.grade==='good'),bad=sel.filter(x=>x.grade!=='good');
+  let cls,head;
+  if(!sel.length){return {cls:'bad',html:'<div class="fb bad">Choose at least one observation.</div>',kind:'none'}}
+  if(!bad.length){cls='ok';head=good.length>1?'Strong reasoning. Separate observations point the same way.':'Good. That observation supports your answer.'}
+  else if(good.length){cls='mid';head='Partly supported. One observation is useful and another is not.'}
+  else{cls='bad';head='Right host, but weak reasoning. These statements are true of the log, but they do not show a compromise.'}
+  const tag={good:'Useful evidence.',weak:'Weak on its own.',base:'Explained by the baseline.'};
+  const items=sel.map(x=>`<li><strong>${tag[x.grade]}</strong> ${esc(x.text)}<br><span class="note">${esc(x.why)}</span></li>`).join('');
+  const tail=good.length?'':'<p style="margin:8px 0 0">Look for repeated traffic to a destination that nobody else contacts and the baseline does not explain.</p>';
+  const kind=!bad.length?(good.length>1?'strong':'good'):(good.length?'mixed':'weak');
+  return {cls,kind,html:`<div class="fb ${cls}"><strong>${head}</strong><ul style="margin:8px 0 0">${items}</ul>${tail}</div>`};
+}
+
+/* Feedback for a wrong host: what the observation shows, and what is missing. */
+function hostFeedback(S,h){
+  const f=facts(S),parts=[];
+  if(S.dh&&h===S.dh)parts.push(`${h.name} had ${f.dhNx.length} failed lookups for ${S.dq} (${f.hms(f.dhNx[0].t)} to ${f.hms(f.dhNx[f.dhNx.length-1].t)}). That shows something could not resolve a name. It does not show where the host connects afterward. What is missing: repeated connections to a destination the baseline does not explain.`);
+  if(S.ntp&&h===S.ntp)parts.push(`${h.name} connects to ${S.ntpIp} on port 123 on a steady schedule. Check the baseline: that is the expected time sync. Regular timing alone is not enough.`);
+  if(S.lh&&h===S.lh)parts.push(`${h.name} contacts ${S.svc.dom}, and no other host does. Check the baseline: it is an approved service (${S.svc.purpose}). A unique destination is only suspicious when nothing explains it.`);
+  if(h===S.decoy||h===S.target)parts.push(`${h.name} is part of the health check in the baseline (${S.decoy.name} to ${S.target.name}, port 8080, every 60 seconds). That regular traffic is expected.`);
+  if(h===S.typo&&!(S.dh&&h===S.dh))parts.push(`${h.name} has one failed lookup, for a misspelled name. One failure is not a burst.`);
+  if(f.cnt[h.ip]>=10&&f.sharedShare(h)>=0.5)parts.push(`${h.name} made ${f.cnt[h.ip]} external connections, but most go to websites other hosts also visit. A high count alone does not show a compromise.`);
+  if(!parts.length)parts.push(`Nothing in the excerpt shows ${h.name} making repeated connections to a destination the baseline does not explain. Filter the log by ${h.name} and check its connections one at a time.`);
+  return parts.slice(0,3).join(' ');
+}
+
+function alertHosts(S){
+  const by={};S.ev.filter(e=>e.rc==='NXDOMAIN').forEach(e=>(by[e.src]=by[e.src]||[]).push(e.t));
+  return S.hosts.filter(h=>{const t=(by[h.ip]||[]).slice().sort((a,b)=>a-b);for(let i=0;i+S.thr-1<t.length;i++)if(t[i+S.thr-1]-t[i]<=120)return true;return false});
+}
+
+function baselineItems(S){
+  const f=facts(S),b=[`${S.decoy.name} runs a health check against ${S.target.name} on port 8080 every 60 seconds.`];
+  if(S.ntp)b.push(`${S.ntp.name} syncs its clock with an external time server (${S.ntpIp}, port 123) about every 64 seconds.`);
+  if(S.svc)b.push(`${S.lh.name} is approved to check in with ${S.svc.dom} (${S.svc.ip}, port 443), ${S.svc.purpose}.`);
+  return b;
+}
+
+function explain(S){
+  const f=facts(S),c=S.comp,k=S.c2,hard=S.mode==='hard';
+  const dest=k.dom?`<span class="mono">${esc(k.dom)}</span> (${k.ip}:${k.port})`:`<span class="mono">${k.ip}:${k.port}</span>`;
+  const obs=[`<strong>Repeated, unexplained destination.</strong> ${esc(c.name)} connected ${f.c2.length} times to ${dest}. No other host contacts it and no baseline entry covers it.`,
+    `<strong>Steady pattern.</strong> The connections were ${f.g0} to ${f.g1} seconds apart and ${f.o0} to ${f.o1} bytes out each time.`];
+  if(!S.noBurst&&f.resolve)obs.push(`<strong>Failed lookups first.</strong> ${f.compNx.length} failed lookups for random-looking names (${f.hms(f.compNx[0].t)} to ${f.hms(f.compNx[f.compNx.length-1].t)}), then a lookup of the name above at ${f.hms(f.resolve.t)} that resolved, then the connections.`);
+  else obs.push(`<strong>No failed lookups.</strong> No DNS lookup for this destination appears in the excerpt, and no failed lookups from this host appear either, so a search for failed lookups would miss it.`);
+  const ex=[];
+  if(!S.noBurst&&f.resolve){ex.push(f.line(f.compNx[0]),f.line(f.resolve))}
+  ex.push(...f.c2.slice(0,2).map(f.line));
+  let ruled='',lines=[];
+  if(hard&&S.dh){
+    const d=S.dh,dn=f.dhNx;
+    let t=`<strong>${esc(d.name)} had ${dn.length} failed lookups</strong> for ${esc(S.dq)} (${f.hms(dn[0].t)} to ${f.hms(dn[dn.length-1].t)}). That shows a name that would not resolve, not a beacon: it is one name retried, and none of this host's repeating traffic is left unexplained by the baseline.`;
+    if(S.ntp&&d===S.ntp)t+=` It also connects to ${S.ntpIp} on port 123 about every ${f.ntpGaps[0]===f.ntpGaps[1]?f.ntpGaps[0]:f.ntpGaps[0]+' to '+f.ntpGaps[1]} seconds. That is regular too, but it is the time sync in the baseline.`;
+    if(S.lh&&d===S.lh)t+=` It also connects to ${esc(S.svc.dom)}, which no other host contacts. The baseline lists it as an approved service (${esc(S.svc.purpose)}).`;
+    if(f.cnt[d.ip]>=10)t+=` It is also busy (${f.cnt[d.ip]} external connections), mostly to websites other hosts visit.`;
+    ruled=`<p><strong>Why ${esc(d.name)} was ruled out.</strong> ${t}</p>`;
+    lines=dn.slice(0,2).map(f.line);
+  }else{
+    ruled=`<p><strong>Why ${esc(S.decoy.name)} was ruled out.</strong> It contacts ${esc(S.target.name)} every 60 seconds on port 8080. That is regular like a beacon, but the destination is an internal server and the baseline lists it as a health check. Regularity is a lead, not proof.</p>`;
+    lines=f.hc.slice(0,2).map(f.line);
+  }
+  const also=[];
+  if(hard){
+    if(S.ntp&&S.ntp!==S.dh)also.push(`${esc(S.ntp.name)} syncs time with ${S.ntpIp} (port 123) every ${f.ntpGaps[0]===f.ntpGaps[1]?f.ntpGaps[0]:f.ntpGaps[0]+' to '+f.ntpGaps[1]} seconds. Regular and unique to that host, but in the baseline.`);
+    if(S.svc&&S.lh!==S.dh)also.push(`${esc(S.lh.name)} contacts ${esc(S.svc.dom)}, which no other host does. It is an approved service in the baseline.`);
+    const t0=f.top[0];
+    also.push(t0===c?`${esc(c.name)} has the most external connections (${f.mx}), but that comes from the beacon traffic. Connection count alone is not evidence.`
+      :`${esc(t0.name)} has the most external connections (${f.mx}) and is clean: ${Math.round(100*f.sharedShare(t0))}% of its connections go to websites other hosts also visit. Connection count alone is not evidence.`);
+    also.push(`${esc(S.decoy.name)} contacts ${esc(S.target.name)} every 60 seconds (health check, in the baseline).`);
+  }else{
+    also.push(`${esc(S.typo.name)} has one failed lookup, for a misspelled name. One failure is not a burst.`);
+  }
+  const al=alertHosts(S),names=al.map(h=>h.name);
+  const hit=al.includes(c),others=al.filter(h=>h!==c);
+  let sg=`<p><strong>What this rule would do here.</strong> It alerts when one host has ${S.thr} or more failed lookups within 2 minutes. In this log it would alert on ${names.length?esc(names.join(' and ')):'no host'}`;
+  sg+=hit?`, including ${esc(c.name)}.`:`. It would <strong>not</strong> alert on ${esc(c.name)}, because no failed lookups from that host appear in the excerpt.`;
+  if(others.length)sg+=` The alert on ${esc(others.map(h=>h.name).join(' and '))} would be a false positive: ${S.dh&&others[0]===S.dh?'the failures are retries of one name, not a beacon.':'it is not the compromised host.'}`;
+  sg+=` The rule cannot check timing, sizes or whether a destination is unique. Those need a query in your SIEM or a manual review.</p>`;
+  return {obs,ex,ruled,lines,also,sigma:sg,al:names};
+}
+/*ENDLOGIC*/
 (function(){
 const $=s=>document.querySelector(s);
-let S,hintN=0;
+let S,hintN=0,wrong=0,solved=false;
 const hms=t=>new Date(S.base+t*1000).toISOString().slice(11,19);
-const hn=ip=>S.hosts.find(h=>h.ip===ip).name;
 const line=e=>e.type==='fw'?`${hms(e.t)} fw  ${e.src} > ${e.dst}:${e.port} out=${e.out}${e.dom?' dom='+e.dom:''}`:`${hms(e.t)} dns ${e.src} ${e.q} ${e.rc}`;
-const HINTS=['Regular timing alone is not enough. Look for a destination only one host contacts.','Look through the excerpt for a host that failed several lookups for random-looking names just before it started connecting somewhere.','The compromised host sends nearly the same number of bytes out at an even interval.'];
-const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const HINTS_EASY=['Regular timing alone is not enough. Look for a destination only one host contacts.','Look through the excerpt for a host that failed several lookups for random-looking names just before it started connecting somewhere.','The compromised host sends nearly the same number of bytes out at an even interval.'];
+const HINTS_HARD=['Several failed lookups do not prove a host is compromised, and a compromised host may make none. Check what each host connects to afterward.','Read the baseline, then filter the log one host at a time. Which host keeps connecting to a destination nobody else contacts, and is not explained by the baseline?','Connection count alone is not enough: the compromised host may or may not be the busiest. Compare the repeating traffic against the baseline instead.'];
 function renderLog(){
   const h=$('#fh').value,t=$('#ft').value,q=$('#q').value.trim().toLowerCase();
   const f=S.ev.filter(e=>(!h||e.src===h)&&(!t||e.type===t)&&(!q||line(e).toLowerCase().includes(q)));
@@ -156,16 +357,18 @@ function renderLog(){
 }
 function pickHost(ip){$('#fh').value=$('#fh').value===ip?'':ip;renderLog()}
 function init(seed){
-  S=build(seed);hintN=0;
+  S=build(seed,$('#mode').value);hintN=0;wrong=0;solved=false;
   $('#inv').innerHTML=S.hosts.map(h=>`<tr tabindex="0" data-ip="${h.ip}" aria-label="Filter log by ${h.name}"><td class="mono">${h.name}</td><td class="mono">${h.ip}</td><td>${h.role}</td></tr>`).join('');
   $('#fh').innerHTML='<option value="">All hosts</option>'+S.hosts.map(h=>`<option value="${h.ip}">${h.name} (${h.ip})</option>`).join('');
   $('#ft').value='';$('#q').value='';$('#fh').value='';renderLog();
-  $('#base').textContent=`Baseline: ${S.decoy.name} runs a health check against ${S.target.name} on port 8080 every 60 seconds. This is expected.`;
+  $('#base').innerHTML=baselineItems(S).map(t=>`<li>${esc(t)}</li>`).join('');
   $('#opts').innerHTML=S.hosts.map(h=>`<label><input type="radio" name="h" value="${h.ip}"><span><span class="mono">${h.name}</span> <span class="note">${h.ip}</span></span></label>`).join('');
   $('#fb').innerHTML='';$('#why').hidden=true;$('#why').innerHTML='';
+  $('#evp').hidden=true;$('#evopts').innerHTML='';$('#evfb').innerHTML='';
+  $('#check').disabled=false;$('#reveal').hidden=true;
 }
-function why(){
-  const c=S.comp,k=S.c2,thr=Math.max(4,S.nx-2);
+function showWhy(){
+  const e=explain(S),c=S.comp;
   const yaml=`title: DNS NXDOMAIN Lookup
 name: dns_nxdomain
 logsource:
@@ -185,24 +388,31 @@ correlation:
     - id.orig_h
   timespan: 2m
   condition:
-    gte: ${thr}
+    gte: ${S.thr}
 level: medium`;
   $('#why').hidden=false;
-  $('#why').innerHTML=`<div class="panel"><h2>Why it is ${c.name}</h2><ul>
-    <li><strong>Failed lookups first.</strong> ${S.nx} NXDOMAIN lookups for random names between ${hms(S.burst0)} and ${hms(S.burst1)}. Malware generating domains looks like this until one resolves.</li>
-    <li><strong>Rare destination.</strong> Then it connects to <span class="mono">${k.dom}</span> (${k.ip}:${k.port}), a random-looking name no other host contacts.</li>
-    <li><strong>Even interval.</strong> About every ${S.I} seconds, give or take 2.</li>
-    <li><strong>Same size each time.</strong> Roughly 270 to 330 bytes out.</li></ul>
-    <p><strong>The decoy:</strong> ${S.decoy.name} contacts ${S.target.name} every 60 seconds. It is regular too, but it is the expected internal health check from the baseline. Regularity is a lead, not proof. Also, ${S.typo.name} has one failed lookup for a misspelled name. One failure is not a burst.</p></div>
-  <div class="panel"><h2>What is a Sigma rule?</h2>
-    <p>Sigma is an open, vendor-neutral way to write a detection in YAML. You write it once, then convert it to the query language of a supported SIEM or log platform, such as Splunk or Elasticsearch. This example detects only a burst of failed lookups from one host. It does not detect that a name looks random, or that connections are evenly timed:</p>
-    <pre>${yaml}</pre>
-    <p class="note">This rule is written for Zeek dns.log, where the field is rcode_name. Map the field names to your own log source. The Sigma documentation lists correlation support for only some backends (Splunk, Elasticsearch ES|QL, Grafana Loki, SQL and OpenSearch), so test the conversion. Sigma correlation rules can count events, count distinct values, and sum, average or take percentiles of a field, but they have no way to test for evenly spaced timing. That check is a statistical query in your SIEM.</p></div>
+  $('#why').innerHTML=`<div class="panel"><h2>Why it is ${esc(c.name)}</h2>
+    <p><strong>What the log shows</strong></p><ul>${e.obs.map(x=>`<li>${x}</li>`).join('')}</ul>
+    <pre>${esc(e.ex.join('\n'))}</pre>
+    <p><strong>What that suggests.</strong> A steady connection to a destination that nobody else contacts, and that the baseline does not explain, is consistent with beaconing. It is a strong lead, not proof. A real analyst would confirm it with evidence from the endpoint.</p>
+    ${e.ruled}<pre>${esc(e.lines.join('\n'))}</pre>
+    <p><strong>Other things in this log that are expected</strong></p><ul>${e.also.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+  <div class="panel"><h2>What would a Sigma rule catch?</h2>
+    <p>Sigma is an open, vendor-neutral way to write a detection in YAML. You write it once, then convert it to the query language of a supported SIEM or log platform, such as Splunk or Elasticsearch. This example looks only for a burst of failed lookups from one host:</p>
+    <pre>${esc(yaml)}</pre>${e.sigma}
+    <p class="note">The rule is written for Zeek dns.log, where the field is rcode_name. Map the field names to your own log source. Sigma documents correlation support for only some backends (Splunk, Elasticsearch ES|QL, Grafana Loki, SQL and OpenSearch), so test the conversion. The Splunk conversion counts in fixed 2-minute blocks, so a burst that straddles a block boundary can be missed. Sigma correlation can count events, count distinct values, and sum, average or take percentiles of a field, but it cannot test for evenly spaced timing.</p></div>
   <div class="panel"><h2>Response</h2><ul>
-    <li>Isolate ${c.name}. Capture memory before shutting it down.</li>
-    <li>Block ${k.dom} at DNS and ${k.ip} at the firewall.</li>
-    <li>Search logs for any other host contacting them.</li>
+    <li>Isolate ${esc(c.name)}. Capture memory before shutting it down.</li>
+    <li>Block ${S.noBurst?S.c2.ip+' at the firewall':esc(S.c2.dom)+' at DNS and '+S.c2.ip+' at the firewall'}.</li>
+    <li>Search logs for any other host contacting ${S.noBurst?'that address':'them'}.</li>
     <li>Find the persistence and entry point, then reimage and reset credentials.</li></ul></div>`;
+}
+function lockHost(){document.querySelectorAll('#opts input').forEach(i=>i.disabled=true);$('#check').disabled=true;$('#reveal').hidden=true}
+function evidenceStep(){
+  const opts=evidence(S);
+  $('#evopts').innerHTML=opts.map(o=>`<label><input type="checkbox" name="ev" value="${o.id}"><span>${esc(o.text)}</span></label>`).join('');
+  $('#evp').hidden=false;$('#evfb').innerHTML='';
+  const lg=$('#evleg');lg.focus();
 }
 ['#fh','#ft'].forEach(x=>$(x).addEventListener('change',renderLog));
 $('#q').addEventListener('input',renderLog);
@@ -213,14 +423,39 @@ $('#inv').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const 
 $('#check').addEventListener('click',()=>{
   const r=document.querySelector('input[name=h]:checked');
   if(!r){$('#fb').innerHTML='<div class="fb bad">Select a host first.</div>';return}
-  if(r.value===S.comp.ip){$('#fb').innerHTML=`<div class="fb ok"><strong>Correct: ${S.comp.name}.</strong></div>`;why()}
-  else $('#fb').innerHTML='<div class="fb bad"><strong>Not that one.</strong> Look again at which host contacts a destination nobody else does.</div>';
+  if(r.value===S.comp.ip){
+    solved=true;lockHost();
+    $('#fb').innerHTML=`<div class="fb ok"><strong>Correct: ${esc(S.comp.name)}.</strong> Now say why.</div>`;
+    evidenceStep();
+  }else{
+    wrong++;
+    const h=S.hosts.find(x=>x.ip===r.value);
+    $('#fb').innerHTML=`<div class="fb bad"><strong>Not ${esc(h.name)}.</strong> ${esc(hostFeedback(S,h))}<p class="note" style="margin:8px 0 0">Choose another host, or press Hint.</p></div>`;
+    if(wrong>=2)$('#reveal').hidden=false;
+  }
 });
-$('#hint').addEventListener('click',()=>{$('#fb').innerHTML=`<div class="fb">${HINTS[hintN]}</div>`;hintN=Math.min(hintN+1,2)});
+$('#evform').addEventListener('change',e=>{
+  const boxes=[...document.querySelectorAll('input[name=ev]')],n=boxes.filter(b=>b.checked).length;
+  boxes.forEach(b=>{b.disabled=!b.checked&&n>=2});
+});
+$('#evcheck').addEventListener('click',()=>{
+  const ids=[...document.querySelectorAll('input[name=ev]:checked')].map(b=>b.value);
+  const g=gradeEvidence(S,ids);
+  $('#evfb').innerHTML=g.html;
+  if(g.kind!=='none')showWhy();
+});
+$('#reveal').addEventListener('click',()=>{
+  lockHost();
+  $('#fb').innerHTML=`<div class="fb"><strong>The compromised host is ${esc(S.comp.name)}.</strong> The explanation is below.</div>`;
+  showWhy();
+});
+$('#hint').addEventListener('click',()=>{const H=S.mode==='hard'?HINTS_HARD:HINTS_EASY;$('#fb').innerHTML=`<div class="fb">${esc(H[hintN])}</div>`;hintN=Math.min(hintN+1,2)});
+$('#mode').addEventListener('change',()=>init(Math.floor(Math.random()*4294967295)));
 $('#newbtn').addEventListener('click',()=>init(Math.floor(Math.random()*4294967295)));
-init(Math.floor(Math.random()*4294967295));
+const sp=new URLSearchParams(location.search);
+if(sp.get('mode')==='hard')$('#mode').value='hard';
+init(sp.has('seed')?(parseInt(sp.get('seed'),10)>>>0):Math.floor(Math.random()*4294967295));
 })();
 </script>
-
 </body>
 </html>
